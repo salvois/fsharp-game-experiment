@@ -6,8 +6,9 @@ open Microsoft.Xna.Framework.Input
 
 type Game1() as this =
     inherit Microsoft.Xna.Framework.Game()
-    let _graphics = new GraphicsDeviceManager(this)
-    let mutable _spriteBatch: SpriteBatch = null
+    let graphics = new GraphicsDeviceManager(this)
+    let mutable spriteBatch: SpriteBatch = null
+    let mutable ballTexture: Texture2D = null
     do
         this.Content.RootDirectory <- "Content"
         base.IsMouseVisible <- true
@@ -17,9 +18,8 @@ type Game1() as this =
         base.Initialize()
 
     override this.LoadContent() =
-        _spriteBatch <- new SpriteBatch(this.GraphicsDevice);
-        // TODO: use this.Content to load your game content here
-        ()
+        spriteBatch <- new SpriteBatch(this.GraphicsDevice);
+        ballTexture <- this.Content.Load<Texture2D>("ball");
 
     override this.Update(gameTime: GameTime) =
         if GamePad.GetState(PlayerIndex.One).Buttons.Back = ButtonState.Pressed || Keyboard.GetState().IsKeyDown(Keys.Escape) then
@@ -29,5 +29,7 @@ type Game1() as this =
 
     override this.Draw(gameTime: GameTime) =
         this.GraphicsDevice.Clear(Color.CornflowerBlue)
-        // TODO: Add your drawing code here
+        spriteBatch.Begin();
+        spriteBatch.Draw(ballTexture, Vector2(0f, 0f), Color.White);
+        spriteBatch.End();
         base.Draw(gameTime)
