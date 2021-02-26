@@ -4,22 +4,32 @@ open Microsoft.Xna.Framework
 open Microsoft.Xna.Framework.Graphics
 open Microsoft.Xna.Framework.Input
 
+type Vector = { X: float; Y: float }
+
+module Vector =
+    let zero = { X = 0.0; Y = 0.0 }
+    let add v1 v2 = { X = v1.X + v2.X; Y = v1.Y + v2.Y }
+    let scale factor v = { X = v.X * factor; Y = v.Y * factor }
+    let min v1 v2 = { X = min v1.X v2.X; Y = min v1.Y v2.Y }
+    let max v1 v2 = { X = max v1.X v2.X; Y = max v1.Y v2.Y }
+    let toVector2 v = Vector2(float32 v.X, float32 v.Y)
+
 type Game1() as this =
     inherit Microsoft.Xna.Framework.Game()
     let graphics = new GraphicsDeviceManager(this)
     let mutable spriteBatch: SpriteBatch = null
     let mutable ballTexture: Texture2D = null
-    let mutable ballPosition = Vector2.Zero
-    let ballSpeed = 100.0
+    let mutable ballPosition = Vector.zero
+    let mutable ballVelocity = Vector.zero
+    let ballMass = 50.0
     let oneGee = 9.81
     let pixelsPerMeter = 10.0
-    let mutable ballVelocity = Vector2.Zero
+    let gravity = { X = 0.0; Y = oneGee }
     do
         this.Content.RootDirectory <- "Content"
         base.IsMouseVisible <- true
 
     override this.Initialize() =
-        ballPosition <- Vector2((float32)(graphics.PreferredBackBufferWidth / 2), (float32)(graphics.PreferredBackBufferHeight / 2))
         base.Initialize()
 
     override this.LoadContent() =
@@ -31,33 +41,47 @@ type Game1() as this =
             this.Exit()
 
         let kstate = Keyboard.GetState()
-        let getInc key inc = if kstate.IsKeyDown(key) then inc else 0.0
-        let xAcceleration = getInc Keys.Right oneGee - getInc Keys.Left oneGee
-        let yAcceleration = getInc Keys.Down oneGee - getInc Keys.Up (2.0 * oneGee) + oneGee
-        // let getInc key = if kstate.IsKeyDown(key) then 1.0 else 0.0
-        // let delta = ballSpeed * gameTime.ElapsedGameTime.TotalSeconds
-        // let x =
-        //     float ballPosition.X + (getInc Keys.Right - getInc Keys.Left) * delta 
-        //     |> max 0.0
-        //     |> min (float (this.GraphicsDevice.Viewport.Width - ballTexture.Width))
-        //     |> float32
-        // let y =
-        //     float ballPosition.Y + (getInc Keys.Down - getInc Keys.Up) * delta 
-        //     |> max 0.0
-        //     |> min (float (this.GraphicsDevice.Viewport.Height - ballTexture.Height))
-        //     |> float32
-        // ballPosition <- Vector2(x, y)
-        ballVelocity <- Vector2(
-            float ballVelocity.X + (xAcceleration * pixelsPerMeter * gameTime.ElapsedGameTime.TotalSeconds) |> float32,
-            float ballVelocity.Y + (yAcceleration * pixelsPerMeter * gameTime.ElapsedGameTime.TotalSeconds) |> float32)
-        ballPosition <- Vector2(
-            float ballPosition.X + (float ballVelocity.X * gameTime.ElapsedGameTime.TotalSeconds) |> float32,
-            float ballPosition.Y + (float ballVelocity.Y * gameTime.ElapsedGameTime.TotalSeconds) |> float32)
+        let getInc key = if kstate.IsKeyDown(key) then 1.0 else 0.0
+        let forceValue = 2.0 * oneGee / ballMass
+        let acceleration =
+            { X = getInc Keys.Right - getInc Keys.Left
+              Y = getInc Keys.Down - getInc Keys.Up }
+            |> Vector.scale forceValue
+            |> Vector.scale ballMass
+            |> Vector.add gravity
+        let velocity =
+            acceleration
+            |> Vector.scale (pixelsPerMeter * gameTime.ElapsedGameTime.TotalSeconds)
+            |> Vector.add ballVelocity
+        let maxPosition =
+            { X = float (this.GraphicsDevice.Viewport.Width - ballTexture.Width)
+              Y = float (this.GraphicsDevice.Viewport.Height - ballTexture.Height) }
+        let position =
+            velocity
+            |> Vector.scale gameTime.ElapsedGameTime.TotalSeconds
+            |> Vector.add ballPosition
+        let collide pos vel =
+            let restitution = 0.5
+            let px, vx =
+                match pos.X with
+                | v when v < 0.0 -> 0.0, vel.X * -restitution
+                | v when v > maxPosition.X -> maxPosition.X, vel.X * -restitution
+                | v -> v, vel.X
+            let py, vy =
+                match pos.Y with
+                | v when v < 0.0 -> 0.0, vel.Y * -restitution
+                | v when v > maxPosition.Y -> maxPosition.Y, vel.Y * -restitution
+                | v -> v, vel.Y
+            { X = px; Y = py }, { X = vx; Y = vy }
+        
+        let finalPosition, finalVelocity = collide position velocity
+        ballVelocity <- finalVelocity
+        ballPosition <- finalPosition
         base.Update(gameTime)
 
     override this.Draw(gameTime: GameTime) =
         this.GraphicsDevice.Clear(Color.CornflowerBlue)
         spriteBatch.Begin();
-        spriteBatch.Draw(ballTexture, ballPosition, Color.White);
+        spriteBatch.Draw(ballTexture, Vector.toVector2 ballPosition, Color.White);
         spriteBatch.End();
         base.Draw(gameTime)
