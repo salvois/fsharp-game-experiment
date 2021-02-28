@@ -21,10 +21,13 @@ type Game1() as this =
     let mutable ballTexture: Texture2D = null
     let mutable ballPosition = Vector.zero
     let mutable ballVelocity = Vector.zero
-    let ballMass = 50.0
     let oneGee = 9.81
-    let pixelsPerMeter = 10.0
+    let fluidDensity = 1.2
+    let dragCoefficient = 1.0
+    let ballMass = 70.0
+    let ballArea = 0.85
     let gravity = { X = 0.0; Y = oneGee }
+    let pixelsPerMeter = 64.0 / 1.7
     do
         this.Content.RootDirectory <- "Content"
         base.IsMouseVisible <- true
@@ -40,26 +43,14 @@ type Game1() as this =
         if GamePad.GetState(PlayerIndex.One).Buttons.Back = ButtonState.Pressed || Keyboard.GetState().IsKeyDown(Keys.Escape) then
             this.Exit()
 
-        let kstate = Keyboard.GetState()
-        let getInc key = if kstate.IsKeyDown(key) then 1.0 else 0.0
-        let forceValue = 2.0 * oneGee / ballMass
-        let acceleration =
-            { X = getInc Keys.Right - getInc Keys.Left
-              Y = getInc Keys.Down - getInc Keys.Up }
-            |> Vector.scale forceValue
-            |> Vector.scale ballMass
-            |> Vector.add gravity
-        let velocity =
-            acceleration
-            |> Vector.scale (pixelsPerMeter * gameTime.ElapsedGameTime.TotalSeconds)
-            |> Vector.add ballVelocity
+        let forceValue = 2.0 * oneGee * ballMass
         let maxPosition =
-            { X = float (this.GraphicsDevice.Viewport.Width - ballTexture.Width)
-              Y = float (this.GraphicsDevice.Viewport.Height - ballTexture.Height) }
-        let position =
-            velocity
-            |> Vector.scale gameTime.ElapsedGameTime.TotalSeconds
-            |> Vector.add ballPosition
+            { X = float (this.GraphicsDevice.Viewport.Width - ballTexture.Width) / pixelsPerMeter
+              Y = float (this.GraphicsDevice.Viewport.Height - ballTexture.Height) / pixelsPerMeter }
+
+        let kstate = Keyboard.GetState()
+        let getForceDirection key = if kstate.IsKeyDown(key) then 1.0 else 0.0
+        let computeDrag velocity = (if velocity < 0.0 then 0.5 else -0.5) * fluidDensity * velocity * velocity * dragCoefficient * ballArea
         let collide pos vel =
             let restitution = 0.5
             let px, vx =
@@ -73,6 +64,24 @@ type Game1() as this =
                 | v when v > maxPosition.Y -> maxPosition.Y, vel.Y * -restitution
                 | v -> v, vel.Y
             { X = px; Y = py }, { X = vx; Y = vy }
+
+        let drag = { X = computeDrag ballVelocity.X
+                     Y = computeDrag ballVelocity.Y }
+        let acceleration =
+            { X = getForceDirection Keys.Right - getForceDirection Keys.Left
+              Y = getForceDirection Keys.Down - getForceDirection Keys.Up }
+            |> Vector.scale forceValue
+            |> Vector.add drag
+            |> Vector.scale (1.0 / ballMass)
+            |> Vector.add gravity
+        let velocity =
+            acceleration
+            |> Vector.scale gameTime.ElapsedGameTime.TotalSeconds
+            |> Vector.add ballVelocity
+        let position =
+            velocity
+            |> Vector.scale gameTime.ElapsedGameTime.TotalSeconds
+            |> Vector.add ballPosition
         
         let finalPosition, finalVelocity = collide position velocity
         ballVelocity <- finalVelocity
@@ -82,6 +91,6 @@ type Game1() as this =
     override this.Draw(gameTime: GameTime) =
         this.GraphicsDevice.Clear(Color.CornflowerBlue)
         spriteBatch.Begin();
-        spriteBatch.Draw(ballTexture, Vector.toVector2 ballPosition, Color.White);
+        spriteBatch.Draw(ballTexture, ballPosition |> Vector.scale pixelsPerMeter |> Vector.toVector2, Color.White);
         spriteBatch.End();
         base.Draw(gameTime)
