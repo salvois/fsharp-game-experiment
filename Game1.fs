@@ -50,6 +50,7 @@ type Game1() as this =
     let oneGee = 9.81
     let fluidDensity = 1.2
     let dragCoefficient = 1.0
+    let coefficientOfFriction = 1.0
     let ballMass = 70.0
     let ballArea = 0.85
     let gravity = { X = 0.0; Y = oneGee }
@@ -90,14 +91,23 @@ type Game1() as this =
                 | v when v > maxPosition.Y -> maxPosition.Y, vel.Y * -restitution
                 | v -> v, vel.Y
             { X = px; Y = py }, { X = vx; Y = vy }
+        let computeFriction velocity =
+            let f = oneGee * ballMass * coefficientOfFriction
+            match velocity with
+            | v when v > 0.01 -> -f
+            | v when v < -0.01 -> f
+            | _ -> 0.0
 
         let drag = { X = computeDrag ballVelocity.X
                      Y = computeDrag ballVelocity.Y }
+        let friction = { X = if abs(ballPosition.Y - maxPosition.Y) < 0.01 then computeFriction ballVelocity.X else 0.0
+                         Y = 0.0 }
         let acceleration =
             { X = getForceDirection Keys.Right - getForceDirection Keys.Left
               Y = getForceDirection Keys.Down - getForceDirection Keys.Up }
             |> Vector.scale forceValue
             |> Vector.add drag
+            |> Vector.add friction
             |> Vector.scale (1.0 / ballMass)
             |> Vector.add gravity
         let velocity =
